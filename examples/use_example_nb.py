@@ -9,10 +9,17 @@ def _():
     from pathlib import Path
     import polars as pl
     from typing import Iterable, List
-    import marimo as mo
+    # import marimo as mo
 
-    p = Path(r"G:\PhD_archive\QPR Data\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
+    # p = Path(r"G:\PhD_archive\QPR Data\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
+    p = Path(r"D:\nextcloud\QPR tests & Operation\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
+    p
 
+    return List, Path, p, pl
+
+
+@app.cell
+def _(List, Path, p, pl):
     def find_files(
         path: Path,
         glob_pattern: str = "*.txt",
@@ -24,7 +31,7 @@ def _():
             files = path.glob(glob_pattern)
             return [p for p in files if p.is_file()]
         raise FileNotFoundError(f"Path not found: {path}")
-    
+
     def load_csv_data(path: str | Path, pattern="*.txt", separator: str = "\t", read_schema = None):
         p = Path(path)
         files = find_files(p, glob_pattern=pattern)
@@ -98,7 +105,7 @@ def _():
         # throwing empty columns away
         if to_drop:
             df = df.drop(to_drop)
-        
+
         # creating a datetime column
         dressed_df = df.with_columns(
             pl.datetime(
@@ -110,33 +117,31 @@ def _():
                 second=pl.col("Time").dt.second(),
             ).alias("DateTime")
         )
-    
+
         # mapping unique filenames from scan_desc to a map dataframe with indecses = scan_id
         scan_map = df.select(
             pl.col("scan_desc").unique(maintain_order=True)
         ).with_row_index("scan_id").with_columns(pl.col("scan_id")+1)
-    
+
         # appling indexes to all filenames from mapped dataframe and adding series field
         dressed_df = dressed_df.join(scan_map, on="scan_desc").with_columns(pl.lit(0).alias("series"))
-    
+
         dressed_df = dressed_df.with_columns(
         pl.col("scan_desc")
           .str.extract(fr"(?i){seires_key}[_.-]*([0-9]{{1,2}})")
-          .cast(pl.Int64)
+          .cast(pl.Int16)
           .alias("series")
         )
-    
-    
+
+
         return dressed_df
 
-        
-    all_data, files=load_csv_data(r"G:\PhD_archive\QPR Data\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS", '*Measurements*.txt')
+
+    all_data, files=load_csv_data(p, '*Measurements*.txt')
     all_data2 = dress_csv(all_data, to_drop=["P_forw (giga)", "P_refl (giga)", "P_trans (giga)"])
 
     all_data, all_data2
     # mo.ui.table(all_data, show_column_summaries=True)
-
-
     return
 
 
