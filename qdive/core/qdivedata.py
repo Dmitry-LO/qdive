@@ -58,7 +58,7 @@ class QData:
         - to_drop: list[str], optional
             Columns to remove from the DataFrame (passed to dress_csv).
         - seires_key: str, optional
-            Column name used as a logical grouping key in analysis.
+            A string key that will be used to derive series ID from a file
         - drop_empty: bool, default=True
             determains if all empty columns with null values will be dropped
 
