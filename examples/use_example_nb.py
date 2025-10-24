@@ -9,11 +9,14 @@ def _():
     from pathlib import Path
     import polars as pl
     from typing import Iterable, List
-    # import marimo as mo
+    import os
+    cwd = os.getcwd()
+    cwd
 
-    p = Path(r"G:\PhD_archive\QPR Data\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
+    # p = Path(r"G:\PhD_archive\QPR Data\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
     # p = Path(r"D:\nextcloud\QPR tests & Operation\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
-    p
+    p = Path("examples/2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
+    {"Workdir":cwd, "Path":p}
     return Iterable, p, pl
 
 
