@@ -1,7 +1,13 @@
 import marimo
 
-__generated_with = "0.17.0"
+__generated_with = "0.16.5"
 app = marimo.App(width="medium")
+
+
+@app.cell
+def _():
+    # TODO: 1. 
+    return
 
 
 @app.cell
@@ -29,6 +35,34 @@ def _(p):
 
     exp1.data, exp1.metadata
     return (exp1,)
+
+
+app._unparsable_cell(
+    r"""
+    def group_and_combine(
+        df: pl.DataFrame,
+        param: str = \"Set Temp [K]\",
+        param_tol: float = 0.1,
+        grope_by = \"\"
+        divide_by: dict | None = None,
+    ) -> pl.DataFrame:
+        \"\"\"
+        Return a new DataFrame aggregated by proximity based on the selected column. Computes statistics.
+        \"\"\"
+        if devide_by is None:
+            devide_by = [\"series\"]
+        print(devide_by)
+        pass
+
+    schema = {
+        \"split\": [\"series\",\"scan_id\"]
+        \"merge\": {\"scan_id\":[1,2,3]}
+    }
+    new_df = grupe_and_compute(exp1.data)
+
+    """,
+    name="_"
+)
 
 
 @app.cell
@@ -105,86 +139,6 @@ def _(Iterable, exp1, pl):
 
 
     result = collapse_by_distance(exp1.data, column_name="Set Temp [K]", max_distance=0.2)
-    return (result,)
-
-
-@app.cell
-def _(pl, result):
-    import matplotlib.pyplot as plt
-
-    def plot_with_errorbars(
-        df: pl.DataFrame,
-        column_nameX: str,
-        column_nameY: str,
-        *,
-        xlabel: str | None = None,
-        ylabel: str | None = None,
-        title: str | None = None,
-        color: str = "tab:blue",
-        marker: str = "o",
-        capsize: float = 3.0,
-    ):
-        """
-        Plot a Matplotlib error bar plot using columns with '_avg' and '_std' suffixes.
-
-        Parameters
-        ----------
-        df : pl.DataFrame
-            Aggregated Polars DataFrame containing *_avg and *_std columns.
-        column_nameX : str
-            Base column name for X (e.g., "Set Temp [K]").
-        column_nameY : str
-            Base column name for Y (e.g., "Power [W]" or "Q-factor").
-        xlabel, ylabel, title : str | None
-            Optional axis labels / title overrides.
-        color : str
-            Matplotlib color name.
-        marker : str
-            Marker style (default "o").
-        capsize : float
-            Length of error bar caps.
-        """
-        # Convert to pandas for Matplotlib
-        pdf = df.to_pandas()
-
-        x = pdf[f"{column_nameX}_avg"]
-        y = pdf[f"{column_nameY}_avg"]
-
-        # Optional error columns
-        xerr = pdf.get(f"{column_nameX}_std", None)
-        yerr = pdf.get(f"{column_nameY}_std", None)
-
-        fig, ax = plt.subplots(figsize=(6, 4))
-        ax.errorbar(
-            x, y,
-            xerr=xerr,
-            yerr=yerr,
-            fmt=marker,
-            color=color,
-            ecolor="gray",
-            elinewidth=1,
-            capsize=capsize,
-            label=column_nameY
-        )
-
-        ax.set_xlabel(xlabel or column_nameX)
-        ax.set_ylabel(ylabel or column_nameY)
-        if title:
-            ax.set_title(title)
-        ax.grid(True, ls="--", alpha=0.4)
-        ax.legend()
-        plt.tight_layout()
-        plt.show()
-
-
-    plot_with_errorbars(
-        result,
-        column_nameX="Set Temp [K]",
-        column_nameY="Surface Resistance [nOhm]",
-        xlabel="Set Temperature (K)",
-        ylabel="Amplitude (dB)",
-        title="Temperature Dependence of Amplitude",
-    )
     return
 
 
