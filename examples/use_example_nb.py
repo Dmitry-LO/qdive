@@ -14,6 +14,7 @@ def _():
 def _():
     from pathlib import Path
     import polars as pl
+    import polars.selectors as cs
     from typing import Iterable, List
     import os
     import marimo as mo
@@ -24,12 +25,12 @@ def _():
     # p = Path(r"D:\nextcloud\QPR tests & Operation\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
     p = Path("examples/2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
     {"Workdir":cwd, "Path":p}
-    return Iterable, mo, p, pl
+    return cs, mo, p, pl
 
 
 @app.cell
 def _(p):
-    from qdive import QData as qd
+    from qdive import QData as qd # will need to rename it to something else... such as QPRScan
 
     exp1 = qd.load_and_dress(p, pattern="*Measurements*.txt")
 
@@ -39,128 +40,100 @@ def _(p):
 
 
 @app.cell
-def _(exp1, pl):
-    def grupe_and_compute(
-        df: pl.DataFrame,
-        param: str = "Set Temp [K]",
-        param_tol: float = 0.1,
-        grope_by = "",
-        split_by: dict | None = None,
-    ) -> pl.DataFrame:
-        """
-        Return a new DataFrame aggregated by proximity based on the selected column. Computes statistics.
-        """
-        if split_by is None:
-            pass
-        print(split_by)
-        grupped_df = (df
-            .sort(by=pl.col(param))
-            .with_columns(pl.col(param)
-                .diff().alias("diff").fill_null(0))
-            .with_columns(jump=(pl.col("diff")>param_tol))
-            .cast({"jump":pl.UInt8})
-            .with_columns((pl.col("jump").cum_sum()+1).alias("grupe"))
-                     )
-
-        return grupped_df
-
-    schema = {
-        "split": ["series","scan_id"],
-        "merge": {"scan_id":[1,2,3]}
-    }
-    new_df = grupe_and_compute(exp1.data, param="Heater Power [mW]")
-    new_df
-
-    return
+def _(cs, exp1):
+    exp2 = exp1.aggregate_and_compute(
+        x_ax_tol=0.5, 
+        remove_multiple=True, 
+        extra_stats_cols="LS336 B [K]", 
+        with_aggroups=True
+    )
+    exp2.data.select(cs.contains(["Set Freq [Hz]_aggroup", "Set Freq [Hz]"]))
+    return (exp2,)
 
 
-@app.cell(hide_code=True)
-def _(Iterable, exp1, pl):
-    ## TEST
+@app.cell
+def _(exp2, mo, pl):
+    # Use a unique name (not "df")
+    agg_df: pl.DataFrame = exp2.data
 
-    def collapse_by_distance(
-        df: pl.DataFrame,
-        column_name: str,
-        max_distance: float,
-        *,
-        scan_id: bool = True,
-        Series: bool = True,
-        extra_keys: Iterable[str] | None = None,
-        group_col: str = "group",
-    ) -> pl.DataFrame:
-        """
-        Cluster rows by proximity in `column_name` with tolerance `max_distance`,
-        optionally separated by key columns, then reduce each cluster to one row:
-          - float columns -> `<name>_avg` and `<name>_std`
-          - all other columns -> first() value in the cluster
-        """
-        if column_name not in df.columns:
-            raise ValueError(f"'{column_name}' not in DataFrame.")
+    # Available temperatures from the aggregated table
+    temp_values = (
+        agg_df
+        .select(pl.col("Set Temp [K]_mean").unique().drop_nulls())
+        .to_series()
+        .to_list()
+    )
+    temp_values = sorted(temp_values)
 
-        # Build key columns list
-        keys: list[str] = []
-        if scan_id and "scan_id" in df.columns:
-            keys.append("scan_id")
-        if Series and "Series" in df.columns:
-            keys.append("Series")
-        if extra_keys:
-            for k in extra_keys:
-                if k not in df.columns:
-                    raise ValueError(f"Key column '{k}' not in DataFrame.")
-            keys.extend(list(extra_keys))
+    # Widgets
+    temp_select = mo.ui.multiselect(
+        options=[str(t) for t in temp_values],
+        value=[str(2.5)] if 2.5 in temp_values else ([str(temp_values[0])] if temp_values else []),
+        label="Temperatures (K)",
+    )
+    std_k = mo.ui.number(1.0,10.0, step=0.5, label="Std multiplier (k)")
+    connect_lines = mo.ui.checkbox(value=True, label="Connect points per T")
 
-        # Sort so proximity is evaluated within each key block
-        sort_cols = keys + [column_name]
-        df_sorted = df.sort(sort_cols)
-
-        # Proximity cluster id within each (keys) block
-        gap = (pl.col(column_name) - pl.col(column_name).shift(1))
-        is_break = gap.fill_null(max_distance + 1.0) > max_distance
-        if keys:
-            df_tagged = df_sorted.with_columns(is_break.cum_sum().over(keys).alias(group_col))
-        else:
-            df_tagged = df_sorted.with_columns(is_break.cum_sum().alias(group_col))
-
-        # Make it 1-based for readability
-        df_tagged = df_tagged.with_columns(pl.col(group_col) + 1)
-
-        # Aggregations: do NOT aggregate key columns (including group_col) to avoid duplicates
-        groupby_cols = keys + [group_col]
-        float_types = {pl.Float32, pl.Float64}
-
-        agg_exprs: list[pl.Expr] = []
-        for col, dtype in df.schema.items():
-            if col in groupby_cols:
-                continue  # keys will be included automatically by groupby
-            if dtype in float_types:
-                agg_exprs.append(pl.col(col).mean().alias(f"{col}_avg"))
-                agg_exprs.append(pl.col(col).std(ddof=1).alias(f"{col}_std"))
-            else:
-                agg_exprs.append(pl.col(col).first().alias(col))
-
-        out = (
-            df_tagged
-            .group_by(groupby_cols, maintain_order=True)
-            .agg(agg_exprs)
-            .sort(groupby_cols)
-        )
-        return out
+    # Show controls
+    mo.vstack([temp_select, std_k, connect_lines])
+    return agg_df, connect_lines, std_k, temp_select
 
 
+@app.cell
+def _(agg_df: "pl.DataFrame", connect_lines, std_k, temp_select):
+    def _():
+        # marimo
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import polars as pl
 
-    result = collapse_by_distance(exp1.data, column_name="Set Temp [K]", max_distance=0.2)
+        # Read widget values created in the previous cell
+        selected_ts = [float(t) for t in temp_select.value]
+        k = float(std_k.value)
+        connect = bool(connect_lines.value)
+
+        fig, ax = plt.subplots()
+
+        for t in selected_ts:
+            sub = agg_df.filter(pl.col("Set Temp [K]_mean") == t)
+            if sub.height == 0:
+                continue
+
+            x = sub["Peak Field on Sample [mT]_mean"].to_numpy()
+            xerr = k * sub["Peak Field on Sample [mT]_std"].to_numpy()
+
+            y = sub["Surface Resistance [nOhm]_mean"].to_numpy()
+            yerr = k * sub["Surface Resistance [nOhm]_std"].to_numpy()
+
+            ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="o", capsize=3, label=f"T = {t} K")
+
+            if connect and x.size > 1:
+                order = np.argsort(x)
+                ax.plot(x[order], y[order])
+
+        ax.set_xlabel("Peak Field on Sample [mT] (mean)")
+        ax.set_ylabel("Surface Resistance [nOhm] (mean)")
+        ax.grid(True)
+        if selected_ts:
+            ax.legend()
+        fig.tight_layout()
+        return fig  # returning the figure is enough for Marimo
+
+
+    _()
     return
 
 
 @app.cell
-def _(pl):
-    df = pl.DataFrame(
-        {
-            "a": ["a1","a1","a1", "b1", "b1", "b1", "c1"],
-            "b": [1, 2, 3, 4, 5, 6, 7],
-            "c": [5, 4, 3, 2, 1, 18, 21],
-        }
-    )
+def _(cs, new_df, pl):
+    # df = pl.DataFrame(
+    #     {
+    #         "a": ["a1","a1","a1", "b1", "b1", "c1", "d1"],
+    #         "b": [2, 2, 3, 4, 5, 6, 7],
+    #         "c": [5.1, 4.2, 3.3, 2.7, 1.7, 18.0, 21.9],
+    #         "n": ["Noah", "Jacob", "Elijah", "Adam", "Samuel", "David", "Isaac"],
+    #     }
+    # )
 
     # df = pl.DataFrame(
     #     {
@@ -170,61 +143,138 @@ def _(pl):
     #     }
     # )
 
-    to_combine={
-        "a": None, #["b1", "c1"],
-        "b": None, #[1,3,2]
+    # schema = {
+    #     "a": ["a1", "c1", ["d1", "b1"]], # Add requirement that should allways be list or empty list or list of lists.
+    #     "b": [1,[2,3]],
+    # }
+
+    df = new_df
+    schema = {
+        "series": [],
+        # "scan_id": [],
     }
+
+
+    schema.update({name: [] for name in df.select(cs.contains("_param_groupe")).columns})
+
+    stat_list = [
+        "Set Temp [K]",
+        "Peak Field on Sample [mT]",
+        "Surface Resistance [nOhm]",
+    ]
+
+    remove_nultiple = False
+
+    def build_mapping(schema: dict) -> dict:
+        mapping = {}
+        for col, items in schema.items():
+            inner = {}
+            for i, element in enumerate(items, start=1):
+                group = f"group_{i}"
+                if isinstance(element, list):
+                    for sub in element:
+                        inner[str(sub)] = group
+                else:
+                    inner[str(element)] = group
+            mapping[col] = inner
+        return mapping
+
+    mapping = build_mapping(schema)
+    print(mapping.items())
 
     # Also need to do a version if it is to combine column<100
     df2=df.clone()
-    for col, values in list(to_combine.items()):  # use list() to allow modification
-        valid = []
-        if values is not None:
-            for v in values:
-                if v in df2[col].to_list():
-                    valid.append(v)
-                else:
-                    print(f"⚠️ WARNING: value '{v}' not found in column '{col}' - dropping.")
-                to_combine[col] = valid
-        else:
-            # valid = df2[col].to_list()
-            to_combine[col] = []
-    
-    for column_key in to_combine.keys():    
-        df2 = (df2
-            .with_columns(
-                pl.Series(column_key+"_list", [[x] for x in df2[column_key]])
-                )
-            .with_columns(
-                pl.when(pl.col(column_key).is_in(to_combine[column_key]))
-                .then(pl.lit(to_combine[column_key]))
-                .otherwise(pl.col(column_key+"_list"))
-                .alias(column_key)
-                )
-            .drop(column_key+"_list")
-            )
 
+    # for col, values in list(mapping.items()):  # use list() to allow modification
+    #     print(col, values)
+    #     valid = []
+    #     if values is not None:
+    #         for v in values:
+    #             print(v)
+    #             if v in df2[col].to_list():
+    #                 valid.append(v)
+    #             else:
+    #                 print(f"⚠️ WARNING: value '{v}' not found in column '{col}' - dropping.")
+    #             mapping[col] = valid
+    #     else:
+    #         # valid = df2[col].to_list()
+    #         mapping[col] = []
 
-    computed_df = (df2
-        .group_by(to_combine.keys())
-        .agg([pl.col("c").mean().alias("c_mean"), 
-              pl.col("c").std().alias("c_std").fill_null(0)]
-            )
+    print(mapping.items())
+    for column_key, mp in mapping.items():
+        base = pl.col(column_key).cast(pl.String)
+        df2 = df2.with_columns(
+            base.replace_strict(mp, default=base).alias(f"{column_key}_aggroup")
         )
 
-    df, df2, computed_df
+    ## Now aggrigation
+    # first create useful liset for working with data
+    float_cols = []
+    non_float_cols = []
+    for colname in df.columns:
+        if colname not in schema.keys():
+            if df[colname].dtype in (pl.Float32, pl.Float64): #pl.Int64, pl.Int32
+                float_cols.append(colname)
+            else:
+                non_float_cols.append(colname)
+
+    # Aggregation instruction list
+    aggregation_list = [pl.col(colname).mean().alias(colname+"_mean") for colname in stat_list]
+    aggregation_list += [pl.col(colname).std().alias(colname+"_std").fill_null(0) for colname in stat_list]
+    aggregation_list += [pl.col(colname) for colname in df.columns]
+
+    # Columns list whose list values will have duplicates removed after group_by.
+    # Usually not needed, default is False, since you can always clean duplicates later with `.list.unique()`.
+    # Keeping the non-cleaned lists can be useful to inspect the full dataset
+    if remove_nultiple: 
+        unique_list = [pl.col(colname).list.unique().alias(colname) for colname in df.columns if df[colname].dtype not in (pl.Float32, pl.Float64)]
+    else:
+        unique_list = []
+
+    # we will add sortkey here
+    computed_df = (df2
+        .group_by([key+"_aggroup" for key in schema.keys()]) 
+        .agg(aggregation_list).with_columns(unique_list)
+        .drop(cs.contains("_aggroup"))
+        )
+
+    mapping, df, df2, computed_df
     return (computed_df,)
 
 
 @app.cell
-def _(mo):
-    groups = mo.ui.multiselect(
-        options=["a1", "b1", "c1"],   # adjust to your data
-        value=["a1","b1"]
+def _():
+    ### BKP
+
+    ## Method 1 sorting preparatriob
+    # for column_key in to_combine.keys():    
+    #     df2 = (df2
+    #         # Creating additinall column of list that will serve as single sist element source in otherwise
+    #         .with_columns(
+    #             pl.Series(column_key+"_list", [[x] for x in df2[column_key]])
+    #             )
+    #         .with_columns(
+    #             pl.when(pl.col(column_key).is_in(to_combine[column_key]))
+    #             .then(pl.lit(to_combine[column_key]))
+    #             .otherwise(pl.col(column_key+"_list"))
+    #             .alias(column_key)
+    #             )
+    #         .drop(column_key+"_list")
+    #         )
+    return
+
+
+app._unparsable_cell(
+    r"""
+     groups = mo.ui.multiselect(
+        options=[\"a1\", \"b1\", \"c1\"],   # adjust to your data
+        value=[\"a1\",\"b1\"]
     )
 
     groups
-    return (groups,)
+    """,
+    name="_"
+)
 
 
 @app.cell
@@ -260,7 +310,6 @@ def _(sel):
     )
 
     fig  # just return the figure; marimo renders it interactively
-
     return
 
 

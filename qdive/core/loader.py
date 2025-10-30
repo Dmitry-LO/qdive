@@ -15,7 +15,11 @@ def find_files(
         return [p for p in files if p.is_file()]
     raise FileNotFoundError(f"Path not found: {path}")
 
-def load_csv_data(path: str | Path, pattern: str = "*.txt", separator: str = "\t"):
+def load_csv_data(path: str | Path,
+                  pattern: str = "*.txt",
+                  separator: str = "\t",
+                  read_schema: dict[str, pl.DataType] | None = None
+                  ):
     """
     Load measurement text files into a Polars DataFrame.
 
@@ -35,7 +39,8 @@ def load_csv_data(path: str | Path, pattern: str = "*.txt", separator: str = "\t
     (pl.DataFrame, list[Path])
         Combined DataFrame and list of loaded files.
     """
-    read_schema = {
+    if read_schema is None:
+            read_schema = {
                 "Date": pl.Utf8,
                 "Time": pl.Utf8,
                 "Set Temp [K]": pl.Float64,
@@ -75,7 +80,7 @@ def load_csv_data(path: str | Path, pattern: str = "*.txt", separator: str = "\t
                 "DC current [mA]": pl.Float64,
                 "DC Ref current [mA]": pl.Float64,
                 "Freq Hameg [Hz]": pl.Float64,
-            }
+            } # type: ignore
         
     
     p = Path(path)
@@ -94,7 +99,7 @@ def load_csv_data(path: str | Path, pattern: str = "*.txt", separator: str = "\t
         schema_overrides=read_schema,
     ).with_columns([
         pl.col("Date").str.to_date("%Y/%m/%d", strict=False), 
-        pl.col("Time").str.to_time("%H:%M:%s", strict=False)
+        pl.col("Time").str.to_time("%H:%M:%S", strict=False)
         ]
     ).collect()
 
