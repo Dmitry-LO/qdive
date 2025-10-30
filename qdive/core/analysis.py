@@ -99,13 +99,13 @@ def aggregate_and_compute(
     #     else:
     #         # valid = df2[col].to_list()
     #         mapping[col] = []
-
+    
     for column_key, mp in mapping.items():
         unite_remaining = schema[column_key].get("unite_rest", False)
         base = pl.col(column_key).cast(pl.String) #default value
         df2 = df2.with_columns(
             base
-            .replace_strict(mp, default=base if not unite_remaining else "UNMAPPED") # Replacing values
+            .replace_strict(mp, default="g_"+base if not unite_remaining else "g_rest") # Replacing values
             # mp is mapping {"100":"group_1"}
             # if oroginal value in column is 100 -> replaced by "group_1"
             # if value is not in map -> will be replaced by base=str(original)
@@ -154,11 +154,13 @@ def build_mapping(schema: dict) -> dict:
     for col, items in schema.items():
         inner = {}
         for i, element in enumerate(items["groups"], start=1):
-            group = f"group_{i}"
+            # group = f"group_{i}" #group = f"group_{i}"
             if isinstance(element, list):
                 for sub in element:
+                    group = f"g_{element[0]}" #Added for test
                     inner[str(sub)] = group
             else:
+                group = f"g_{element}"
                 inner[str(element)] = group
         mapping[col] = inner
     return mapping

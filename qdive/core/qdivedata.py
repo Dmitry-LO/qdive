@@ -116,8 +116,10 @@ class QData:
         grouped_df = cluster_by_proximity(self.data, param=param, param_tol=param_tol)
         return replace(self, data=grouped_df)
     
+    # pass parameters as list?? 
     def aggregate_and_compute(
         self,
+        params: list[tuple[str, float]] = [("Set Temp [K]",0.09), ("Peak Field on Sample [mT]",1), ("Set Freq [Hz]",100000)],
         param: str = "Set Temp [K]",
         param_tol: float = 0.09,
         x_ax: str = "Peak Field on Sample [mT]",
@@ -149,8 +151,12 @@ class QData:
         stat_list = [x_ax, y_ax, param] + extra_stats_cols
         stat_list = list(set(stat_list))
 
-        grouped_df = cluster_by_proximity(self.data, param=param, param_tol=param_tol)
-        grouped_df = cluster_by_proximity(grouped_df, param=x_ax, param_tol=x_ax_tol)
-        grouped_df = cluster_by_proximity(grouped_df, param="Set Freq [Hz]", param_tol=100000)
+        grouped_df = self.data.clone()
+        for par, tol in params:
+            grouped_df = cluster_by_proximity(grouped_df, param=par, param_tol=tol)
+
+        # grouped_df = cluster_by_proximity(self.data, param=param, param_tol=param_tol)
+        # grouped_df = cluster_by_proximity(grouped_df, param=x_ax, param_tol=x_ax_tol)
+        # grouped_df = cluster_by_proximity(grouped_df, param="Set Freq [Hz]", param_tol=100000)
         aggregate_df = aggregate_and_compute(grouped_df, schema=schema, stat_list=stat_list, **kwargs)
         return replace(self, data=aggregate_df)

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.17.0"
+__generated_with = "0.16.5"
 app = marimo.App(width="medium")
 
 
@@ -41,13 +41,20 @@ def _(p):
 
 @app.cell
 def _(cs, exp1):
+    # Add param from cluster_by_proximity to stats_cols be default
+    group_schema = {
+        "series": {"groups": [[1,2,3], [7,8]], "unite_rest": True},
+            }
+
     exp2 = exp1.aggregate_and_compute(
-        x_ax_tol=0.5, 
-        remove_multiple=True, 
-        extra_stats_cols="LS336 B [K]", 
+        params = [("Set Temp [K]", 0.09), ("Peak Field on Sample [mT]", 0.5), ("Set Freq [Hz]", 100000)],
+        schema = group_schema,
+        extra_stats_cols=["LS336 B [K]", "Set Freq [Hz]"],
+        remove_multiple=True,
         with_aggroups=True
     )
-    exp2.data.select(cs.contains(["Set Freq [Hz]_aggroup", "Set Freq [Hz]"]))
+    exp2.data.select(cs.contains(["series"])) #_aggroup
+    # exp2.data.columns
     return (exp2,)
 
 
