@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.16.5"
+__generated_with = "0.17.0"
 app = marimo.App(width="medium")
 
 
@@ -37,6 +37,45 @@ def _(p):
 
     exp1.data, exp1.metadata
     return (exp1,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md("""
+    /// admonition | Doing Analysis.
+
+    After loading data we can start analysis.
+    ///
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    schema2 = {
+        "col_name_1": {"groups": [1, 2, [3, 4]]},
+        "col_name_1": {"groups": [[1, 2, 3], [7, 8]], "unite_rest": True},
+    }
+
+    mo.output.append(mo.md("Information about parameters"))
+    mo.output.append(mo.tree(schema2))
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
+    Example of schema definition:
+
+    ```python
+    schema = {
+        "col_name_1": {"groups": [1, 2, [3, 4]]},
+        "series": {"groups": [[1, 2, 3], [7, 8]], "unite_rest": True},
+    }```
+    """
+    )
+    return
 
 
 @app.cell
