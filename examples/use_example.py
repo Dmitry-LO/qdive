@@ -1,20 +1,30 @@
 from pathlib import Path
 import polars as pl
+import polars.selectors as cs
+from typing import Iterable, List
+import os
+import marimo as mo
 
-p = Path(r"G:\PhD_archive\QPR Data\2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
 
-extensions = [".txt", ".csv"]
+p = Path("examples/2022-04-04 - test #36 - ARIES B-3.19 Siegen SIS")
 
-if p.is_file():
-    files = [p]
-elif p.is_dir():
-    files = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in extensions]
-else:
-    raise FileNotFoundError(f"Path not found: {p}")
+from qdive import QData as qd
 
-lfs = []
-for f in files:
-    sep = "\t" if f.suffix.lower() == ".txt" else ","
-    lfs.append(pl.scan_csv(f, separator=sep))
-all_data = pl.concat(lfs)
-print(all_data)
+exp1 = qd.load_and_dress(p, pattern="*Measurements*.txt")
+
+
+group_schema = {
+    "series": {"groups": [], "unite_rest": False},
+        }
+
+exp2 = exp1.aggregate_and_compute(
+    params = [("Set Temp [K]", 0.09), ("Peak Field on Sample [mT]", 0.5), ("Set Freq [Hz]", 100000)],
+    schema = group_schema,
+    extra_stats_cols=["LS336 B [K]", "Set Freq [Hz]"],
+    remove_multiple=True,
+    # with_aggroups=True
+)
+
+from qdive.plotting.plotfunctions import plot_data
+# exp2.data["Peak Field on Sample [mT]"]
+plot_data(exp2.data, exp2.data, x="Peak Field on Sample [mT]", y="Surface Resistance [nOhm]", LineW = 1)

@@ -56,8 +56,8 @@ def cluster_by_proximity(
     return grouped_df
 
 ## TODO: Thorw out non-existing values from schema; think how to make schema more flexible e.g. pass >60 etc 
-## or [100] == everything will be gropped in 100 and restr... maybe its done already? 
-## Also! Make a separate function aggregate to see how gropping works!
+## TODO: or [100] == everything will be gropped in 100 and restr... maybe its done already? 
+## TODO: Also! Make a separate function aggregate to see how gropping works!
 def aggregate_and_compute(
         df: pl.DataFrame,
         schema: dict[str, dict[str, list[Any] | list[list[Any]] | bool]] | None = None,

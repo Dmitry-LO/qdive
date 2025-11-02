@@ -41,38 +41,12 @@ def _(p):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md("""
+    mo.md(
+        """
     /// admonition | Doing Analysis.
 
     After loading data we can start analysis.
     ///
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    schema2 = {
-        "col_name_1": {"groups": [1, 2, [3, 4]]},
-        "col_name_1": {"groups": [[1, 2, 3], [7, 8]], "unite_rest": True},
-    }
-
-    mo.output.append(mo.md("Information about parameters"))
-    mo.output.append(mo.tree(schema2))
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md(
-        """
-    Example of schema definition:
-
-    ```python
-    schema = {
-        "col_name_1": {"groups": [1, 2, [3, 4]]},
-        "series": {"groups": [[1, 2, 3], [7, 8]], "unite_rest": True},
-    }```
     """
     )
     return
@@ -82,7 +56,7 @@ def _(mo):
 def _(cs, exp1):
     # Add param from cluster_by_proximity to stats_cols be default
     group_schema = {
-        "series": {"groups": [[1,2,3], [7,8]], "unite_rest": True},
+        "series": {"groups": [], "unite_rest": False},
             }
 
     exp2 = exp1.aggregate_and_compute(
@@ -90,83 +64,170 @@ def _(cs, exp1):
         schema = group_schema,
         extra_stats_cols=["LS336 B [K]", "Set Freq [Hz]"],
         remove_multiple=True,
-        with_aggroups=True
+        # with_aggroups=True
     )
-    exp2.data.select(cs.contains(["series"])) #_aggroup
+    exp2.data.select(cs.contains(["series"])).unique() #_aggroup
     # exp2.data.columns
     return (exp2,)
 
 
 @app.cell
-def _(exp2, mo, pl):
-    # Use a unique name (not "df")
-    agg_df: pl.DataFrame = exp2.data
+def _():
+    import numpy as np
+    import matplotlib.pyplot as plt
 
-    # Available temperatures from the aggregated table
-    temp_values = (
-        agg_df
-        .select(pl.col("Set Temp [K]_mean").unique().drop_nulls())
-        .to_series()
-        .to_list()
-    )
-    temp_values = sorted(temp_values)
 
-    # Widgets
-    temp_select = mo.ui.multiselect(
-        options=[str(t) for t in temp_values],
-        value=[str(2.5)] if 2.5 in temp_values else ([str(temp_values[0])] if temp_values else []),
-        label="Temperatures (K)",
-    )
-    std_k = mo.ui.number(1.0,10.0, step=0.5, label="Std multiplier (k)")
-    connect_lines = mo.ui.checkbox(value=True, label="Connect points per T")
+    def _to_np(v):
+        # Accepts numpy, pandas, or polars series; falls back to np.array
+        if hasattr(v, "to_numpy"):
+            return v.to_numpy()
+        if hasattr(v, "to_list"):
+            # polars
+            return np.asarray(v.to_list())
+        return np.asarray(v)
 
-    # Show controls
-    mo.vstack([temp_select, std_k, connect_lines])
-    return agg_df, connect_lines, std_k, temp_select
+    def plot_data2(data, plot_scatter=False, x="", y="", nsig=1.0, ax=None, figsize=(9, 6), LineW=1.5, **kwargs):
+        """
+        Draw the plot onto `ax` (created if None) and return (fig, ax).
+        No plt.show(); no global state.
+        """
+        # Prepare axes
+        created_ax = False
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+            created_ax = True
+        else:
+            fig = ax.figure
+            ax.cla()  # clear if reusing
+
+        # Extract columns
+        if plot_scatter:
+            scatterx = data.explode(f"{x}")
+            scattery = data.explode(f"{y}")
+            PlXax  = data[f"{x}"]
+            PlYax  = data[f"{y}"]
+        PlXax2 = data[f"{x}_mean"]
+        PlYax2 = data[f"{y}_mean"]
+        PlXer2 = data[f"{x}_std"]
+        PlYer2 = data[f"{y}_std"]
+
+        # Palettes
+        Pal3 = np.array([
+            [254, 239, 229],
+            [0, 145, 110],
+            [0, 115, 189],
+            [217, 83, 25],
+            [255, 207, 0]
+        ]) / 255
+        Pal = Pal3
+
+        # Settings
+        sc1 = 1
+
+        xlabelN = kwargs.get("xlabel", x)
+        ylabelN = kwargs.get("ylabel", y)
+        freq = 416.0e6
+        plot1name = f"{freq/1e6:.0f} MHz, B test mT Run 0"
+
+        MarkSize = 7 * sc1
+        LineW    = LineW * sc1
+        FontS    = 18 * sc1
+        MarkShape = 'o'
+        MarkColor = 'none'
+        Lcol = Pal[3]
+
+        # Plot
+        ax.errorbar(
+            PlXax2, PlYax2, xerr=nsig * PlXer2, yerr=nsig * PlYer2,
+            fmt='s', label=plot1name, linewidth=LineW, color=Lcol,
+            markeredgecolor='black', markerfacecolor=Pal[2],
+            capsize=3, ecolor='black', markersize=6, markeredgewidth=1.0
+        )
+        if plot_scatter:
+            ax.plot(
+                PlXax, PlYax, MarkShape, label=plot1name, linewidth=LineW,
+                color=Lcol, markeredgecolor=Lcol, markerfacecolor=MarkColor,
+                markersize=MarkSize, markeredgewidth=1.0
+            )
+        font = 'serif'
+        # Cosmetics
+        ax.set_xlabel(xlabelN, fontsize=FontS, fontname=font)
+        ax.set_ylabel(ylabelN, fontsize=FontS, fontname=font)
+        ax.tick_params(
+            direction="in",      # ticks inward
+            top=True, right=True,  # ticks on all sides
+            # length=6, width=1.2,   # size and thickness
+            which="both",          # apply to both major and minor ticks
+        )
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_linewidth(1)
+        ax.tick_params(width=1, labelsize=FontS)
+        for label in ax.get_xticklabels() + ax.get_yticklabels():
+            label.set_fontsize(FontS)
+            label.set_fontname(font)
+        # fig.tight_layout()
+
+        return fig, ax
+    return (plot_data2,)
 
 
 @app.cell
-def _(agg_df: "pl.DataFrame", connect_lines, std_k, temp_select):
-    def _():
-        # marimo
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import polars as pl
+def _(mo):
+    # First row UI elements
+    number1 = mo.ui.number(value=0, label="Value:").style(width="10em")
+    dropdown1 = mo.ui.dropdown(options=["Aas", "Bad", "Cad"], value="Aas", label="Dropdown 1").style(width="200px")
+    slider1 = mo.ui.slider(0, 100, value=50, label="Slider 1")
 
-        # Read widget values created in the previous cell
-        selected_ts = [float(t) for t in temp_select.value]
-        k = float(std_k.value)
-        connect = bool(connect_lines.value)
+    # Second row UI elements
+    number2 = mo.ui.number(value=0, label="Value:").style(width="10em")
+    dropdown2 = mo.ui.dropdown(options=["X", "Y", "Z"], value="X", label="Dropdown 2").style(width="200px")
+    slider2 = mo.ui.slider(0, 100, value=25, label="Slider 2")
 
-        fig, ax = plt.subplots()
-
-        for t in selected_ts:
-            sub = agg_df.filter(pl.col("Set Temp [K]_mean") == t)
-            if sub.height == 0:
-                continue
-
-            x = sub["Peak Field on Sample [mT]_mean"].to_numpy()
-            xerr = k * sub["Peak Field on Sample [mT]_std"].to_numpy()
-
-            y = sub["Surface Resistance [nOhm]_mean"].to_numpy()
-            yerr = k * sub["Surface Resistance [nOhm]_std"].to_numpy()
-
-            ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="o", capsize=3, label=f"T = {t} K")
-
-            if connect and x.size > 1:
-                order = np.argsort(x)
-                ax.plot(x[order], y[order])
-
-        ax.set_xlabel("Peak Field on Sample [mT] (mean)")
-        ax.set_ylabel("Surface Resistance [nOhm] (mean)")
-        ax.grid(True)
-        if selected_ts:
-            ax.legend()
-        fig.tight_layout()
-        return fig  # returning the figure is enough for Marimo
+    # Arrange each row horizontally, then stack the rows vertically
+    mo.vstack([
+        mo.hstack([dropdown1, number1, slider1], gap=0.5, justify="start"),
+        mo.hstack([dropdown2, number2, slider2], gap=0.5, justify="start")
+    ], gap=0.2)
+    return
 
 
-    _()
+@app.cell
+def _(exp2, pl):
+    T = 4.5
+    Ttol = 0.1
+
+    selected = exp2.data.filter(
+        (pl.col("Set Freq [Hz]_mean") < 450e6)
+        & (pl.col("LS336 B [K]_mean") < T+Ttol/2)
+        & (pl.col("LS336 B [K]_mean") > T-Ttol/2)
+        & (pl.col("series").list.contains(1))
+    )
+
+    selected
+    return (selected,)
+
+
+@app.cell
+def _(mo, plot_data2, selected):
+    ## TODO: What we need?
+    # 1. Select if you want to plot scatter
+    # 2. Add legend generation
+    # 3. Add possibility to name axis
+    # 4. 
+
+    # This cell re-runs whenever nsig_slider.value changes
+    fig3, ax = plot_data2(
+        selected,
+        x="Peak Field on Sample [mT]",
+        y="Surface Resistance [nOhm]",
+        xlabel=r"Surface resistance $R_\mathrm{s}$ (n$\Omega$)",
+        ylabel=r"Sample temperature $T$ (K)",
+        nsig=3,
+        LineW=1.0
+    )
+    # fig3.savefig("plot_output_5.pdf", bbox_inches="tight", pad_inches=1.0)
+    mo.mpl.interactive(ax)
     return
 
 
@@ -332,30 +393,39 @@ def _(computed_df, groups, pl):
     )
 
     sel
-    return (sel,)
+    return
 
 
 @app.cell
-def _(sel):
-    import plotly.express as px
+def _(pl):
 
-    # plot c_mean over a linear x-axis (index)
-    fig = px.line(
-        sel.to_pandas(),
-        y="c_mean",
-        markers=True,
-        hover_data=["a"],  # show the group list on hover
-        title="c_mean for selected groups"
+    dfd = pl.DataFrame({"a": [[0.9, 1.0, 1.1], [0.5, 0.7], [1.02, 2.0], [1.2, 0.96]]})
+    # dfd = pl.DataFrame({"a": [[0.9, 1.0, 1.1], [0.5, 0.7], [1.02, 2.0], [1.2, 0.96]]})
+
+
+
+    filtered = dfd.filter(
+        pl.col("a")
+        .list.filter((pl.element() > 0.95) & (pl.element() < 1.05))
+        .list.len() > 0
     )
 
-    # (optional) label x-ticks with the group list instead of index
-    fig.update_xaxes(
-        tickmode="array",
-        tickvals=list(range(len(sel))),
-        ticktext=[str(v) for v in sel["a"].to_list()],
+    filterd2 = dfd.filter(
+        pl.col("a")
+        .list.contains(1.1)
     )
 
-    fig  # just return the figure; marimo renders it interactively
+
+    # dfd.schema["a"]
+
+    if isinstance(dfd.schema["a"], pl.datatypes.List):
+        # Do something if 'a' is a list column
+        print("'a' is a list column")
+    else:
+        # Do something else
+        print("'a' is NOT a list column")
+
+    dfd, filtered, filterd2
     return
 
 
