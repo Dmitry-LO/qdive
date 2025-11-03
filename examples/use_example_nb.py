@@ -174,6 +174,17 @@ def _():
 
 @app.cell
 def _(exp2, mo):
+    x_ax_input = mo.ui.dropdown(options=exp2.data.columns, value=None, label="X Axis:")
+    x_ax_std = mo.ui.slider(0, 5, value=1, label="Std:")
+    y_ax_input = mo.ui.dropdown(options=exp2.data.columns, value=None, label="Y Axis:")
+    y_ax_std = mo.ui.slider(0, 5, value=1, label="Std:")
+    ui3=mo.vstack([mo.hstack([x_ax_input, x_ax_std]), mo.hstack([y_ax_input, y_ax_std])])
+    ui3
+    return x_ax_input, x_ax_std, y_ax_input
+
+
+@app.cell
+def _(exp2, mo):
     # Create individual UI elements for each row
     parameters = mo.ui.array([
         mo.ui.dictionary({
@@ -185,24 +196,37 @@ def _(exp2, mo):
         for i in range(4)
     ])
 
+    # Your dynamic list
+    data = [1, 2, 4, 5, 6, 1]
+
+    # Create a checkbox for each element in the list
+    checkboxes = mo.ui.array([mo.ui.checkbox(label=str(x)) for x in data])
+    # [mo.md("Series: ")]
+    # chline = mo.hstack(mo.ui.array(checkboxes, justify="start")
+
+
+    # Display the checkboxes in a horizontal stack
+    # mo.hstack(checkboxes, justify="start")
+
     # Display the elements in a vertical stack
-    ui4 = mo.vstack([
-        mo.hstack([elem["parameter"], elem["value"], elem["tolerance"], elem["std"]], gap=0.2)
+    ui4 = mo.vstack([mo.md("Series: ")]+[mo.hstack(checkboxes, justify="start")]+[
+        mo.hstack([elem["parameter"], elem["value"], elem["tolerance"]], gap=0.2, justify="start")
         for elem in parameters
     ])
     ui4
-    return (parameters,)
+    return checkboxes, data, parameters
 
 
 @app.cell
-def _(parameters):
-    parameters.value[0]
+def _(checkboxes, data):
+    checked_items = [item for item, checkbox in zip(data, checkboxes) if checkbox.value]
+    checked_items
     return
 
 
 @app.cell
 def _(exp2, parameters, pl):
-    sel_param = [
+    selected_params = [
         {
             "parameter": par["parameter"].value,   # widget -> has .value
             "value": par["value"].value,
@@ -212,23 +236,30 @@ def _(exp2, parameters, pl):
         for par in parameters
     ]
 
+    expression=[]
+    for pp in selected_params:
+        pname = pp["parameter"]
+        if pname is not None:
+            if isinstance(exp2.data.schema[pname], pl.datatypes.List):
+                expr = pl.col(pname).list.eval(
+                    (pl.element() >= pp["value"]-pp["tolerance"]/2) &
+                    (pl.element() <= pp["value"]+pp["tolerance"]/2)
+                        ).list.any()
+            else:
+                expr=pl.col(pname).is_between(
+                    pp["value"]-pp["tolerance"]/2, pp["value"]+pp["tolerance"]/2
+                )
+            expression.append(expr)
 
-    T = sel_param[2]["value"]
-    Ttol = sel_param[2]["tolerance"]
+    # AND all conditions
+    combined = pl.all_horizontal(expression) if expression else pl.lit(True)
 
-    to_plot = exp2.data.filter(
-        (pl.col("Set Freq [Hz]_mean") < 450e6)
-        & (pl.col("LS336 B [K]_mean") < T+Ttol/2)
-        & (pl.col("LS336 B [K]_mean") > T-Ttol/2)
-        & (pl.col("series").list.contains(1))
-    )
-
-    # sel_param
+    to_plot = exp2.data.filter(combined)
     return (to_plot,)
 
 
 @app.cell
-def _(mo, plot_data2, to_plot):
+def _(mo, plot_data2, to_plot, x_ax_input, x_ax_std, y_ax_input):
     ## TODO: What we need?
     # 1. Select if you want to plot scatter
     # 2. Add legend generation
@@ -238,11 +269,11 @@ def _(mo, plot_data2, to_plot):
     # This cell re-runs whenever nsig_slider.value changes
     fig3, ax = plot_data2(
         to_plot,
-        x="Peak Field on Sample [mT]",
-        y="Surface Resistance [nOhm]",
-        xlabel=r"Surface resistance $R_\mathrm{s}$ (n$\Omega$)",
-        ylabel=r"Sample temperature $T$ (K)",
-        nsig=3,
+        x=x_ax_input.value,#"Peak Field on Sample [mT]",
+        y=y_ax_input.value,#"Surface Resistance [nOhm]",
+        ylabel=r"Surface resistance $R_\mathrm{s}$ (n$\Omega$)",
+        xlabel=r"Sample temperature $T$ (K)",
+        nsig=x_ax_std.value,
         LineW=1.0
     )
     # fig3.savefig("plot_output_5.pdf", bbox_inches="tight", pad_inches=1.0)
