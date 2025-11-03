@@ -173,31 +173,84 @@ def _():
 
 
 @app.cell
-def _(mo):
-    # First row UI elements
-    number1 = mo.ui.number(value=0, label="Value:").style(width="10em")
-    dropdown1 = mo.ui.dropdown(options=["Aas", "Bad", "Cad"], value="Aas", label="Dropdown 1").style(width="200px")
-    slider1 = mo.ui.slider(0, 100, value=50, label="Slider 1")
+def _(exp2, mo):
+    number1     = mo.ui.number(value=0.0, step=0.1, label="Value:")
+    number_tol1 = mo.ui.number(value=0.0, step=0.1, label="Tolerance:")
+    dropdown1   = mo.ui.dropdown(options=exp2.data.columns, value=None, label="1")
+    slider1     = mo.ui.slider(0, 5, value=1, label="Std:")
 
-    # Second row UI elements
-    number2 = mo.ui.number(value=0, label="Value:").style(width="10em")
-    dropdown2 = mo.ui.dropdown(options=["X", "Y", "Z"], value="X", label="Dropdown 2").style(width="200px")
-    slider2 = mo.ui.slider(0, 100, value=25, label="Slider 2")
+    # sliders = mo.ui.array([mo.ui.slider(1, 10) for i in range(3)])
+    # ui0 = mo.hstack([slider for slider in sliders], gap=0.2)
+    # ui0
 
-    # Arrange each row horizontally, then stack the rows vertically
-    mo.vstack([
-        mo.hstack([dropdown1, number1, slider1], gap=0.5, justify="start"),
-        mo.hstack([dropdown2, number2, slider2], gap=0.5, justify="start")
-    ], gap=0.2)
+
+    elements = [mo.ui.array([number1,number_tol1,dropdown1,slider1]) for i in range(4)]
+    ui0 = mo.hstack([element for element in elements], gap=0.2)
+    # ui0
+    ui4 = mo.vstack(mo.hstack([element for element in elements[i]], gap=0.2) for i in range(4))
+    ui4
+    return (elements,)
+
+
+@app.cell
+def _(elements):
+    elements[0].value
     return
 
 
 @app.cell
-def _(exp2, pl):
-    T = 4.5
-    Ttol = 0.1
+def _(exp2, mo):
+    def param_line(num=1, n_value=0.0, d_options=None, d_value=None):
 
-    selected = exp2.data.filter(
+        number     = mo.ui.number(value=n_value, step=0.1, label="Value:")
+        number_tol = mo.ui.number(value=0.0, step=0.1, label="Tolerance:")
+        dropdown   = mo.ui.dropdown(options=d_options, value=d_value, label=f"{num}")
+        slider     = mo.ui.slider(0, 5, value=1, label="Std:")
+
+        # --- styled views (for layout only) ---
+        number_v     = number.style(width="10em")
+        number_tol_v = number_tol.style(width="10em")
+        dropdown_v   = dropdown.style(width="20em")
+
+        view = mo.hstack([dropdown_v, number_v, number_tol_v, slider], gap=0.5, justify="start")
+
+        # return both: view for rendering, widgets for reading .value
+        return {
+            "view": view,
+            "num": num,
+            "dropdown": dropdown,
+            "value": number,
+            "value_tol": number_tol,
+            "slider": slider,
+        }
+
+    # Keep the *data* (widgets) here:
+    rows = [param_line(n, d_options=exp2.data.columns, d_value=None) for n in [1, 2, 3, 4]]
+
+    # Render separately; DO NOT assign this back to `rows`
+    ui = mo.vstack([r["view"] for r in rows], gap=0.2)
+    ui
+    return (rows,)
+
+
+@app.cell
+def _(exp2, pl, rows):
+    selected = [
+        {
+            "row": r["num"],
+            "column": r["dropdown"].value,   # widget -> has .value
+            "value": r["value"].value,
+            "tolerance": r["value_tol"].value,
+            "std": r["slider"].value,
+        }
+        for r in rows
+    ]
+
+
+    T = selected[0]["value"]
+    Ttol = selected[0]["tolerance"]
+
+    to_plot = exp2.data.filter(
         (pl.col("Set Freq [Hz]_mean") < 450e6)
         & (pl.col("LS336 B [K]_mean") < T+Ttol/2)
         & (pl.col("LS336 B [K]_mean") > T-Ttol/2)
@@ -205,11 +258,11 @@ def _(exp2, pl):
     )
 
     selected
-    return (selected,)
+    return (to_plot,)
 
 
 @app.cell
-def _(mo, plot_data2, selected):
+def _(mo, plot_data2, to_plot):
     ## TODO: What we need?
     # 1. Select if you want to plot scatter
     # 2. Add legend generation
@@ -218,7 +271,7 @@ def _(mo, plot_data2, selected):
 
     # This cell re-runs whenever nsig_slider.value changes
     fig3, ax = plot_data2(
-        selected,
+        to_plot,
         x="Peak Field on Sample [mT]",
         y="Surface Resistance [nOhm]",
         xlabel=r"Surface resistance $R_\mathrm{s}$ (n$\Omega$)",
