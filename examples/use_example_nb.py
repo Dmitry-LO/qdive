@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.17.0"
+__generated_with = "0.16.5"
 app = marimo.App(width="medium")
 
 
@@ -174,81 +174,47 @@ def _():
 
 @app.cell
 def _(exp2, mo):
-    number1     = mo.ui.number(value=0.0, step=0.1, label="Value:")
-    number_tol1 = mo.ui.number(value=0.0, step=0.1, label="Tolerance:")
-    dropdown1   = mo.ui.dropdown(options=exp2.data.columns, value=None, label="1")
-    slider1     = mo.ui.slider(0, 5, value=1, label="Std:")
+    # Create individual UI elements for each row
+    parameters = mo.ui.array([
+        mo.ui.dictionary({
+            "parameter": mo.ui.dropdown(options=exp2.data.columns, value=None, label=f"{i}"),
+            "value": mo.ui.number(value=0.0, step=0.1, label="Value:"),
+            "tolerance": mo.ui.number(value=0.0, step=0.1, label="Tolerance:"),
+            "std": mo.ui.slider(0, 5, value=1, label="Std:")
+        })
+        for i in range(4)
+    ])
 
-    # sliders = mo.ui.array([mo.ui.slider(1, 10) for i in range(3)])
-    # ui0 = mo.hstack([slider for slider in sliders], gap=0.2)
-    # ui0
-
-
-    elements = [mo.ui.array([number1,number_tol1,dropdown1,slider1]) for i in range(4)]
-    ui0 = mo.hstack([element for element in elements], gap=0.2)
-    # ui0
-    ui4 = mo.vstack(mo.hstack([element for element in elements[i]], gap=0.2) for i in range(4))
+    # Display the elements in a vertical stack
+    ui4 = mo.vstack([
+        mo.hstack([elem["parameter"], elem["value"], elem["tolerance"], elem["std"]], gap=0.2)
+        for elem in parameters
+    ])
     ui4
-    return (elements,)
+    return (parameters,)
 
 
 @app.cell
-def _(elements):
-    elements[0].value
+def _(parameters):
+    parameters.value[0]
     return
 
 
 @app.cell
-def _(exp2, mo):
-    def param_line(num=1, n_value=0.0, d_options=None, d_value=None):
-
-        number     = mo.ui.number(value=n_value, step=0.1, label="Value:")
-        number_tol = mo.ui.number(value=0.0, step=0.1, label="Tolerance:")
-        dropdown   = mo.ui.dropdown(options=d_options, value=d_value, label=f"{num}")
-        slider     = mo.ui.slider(0, 5, value=1, label="Std:")
-
-        # --- styled views (for layout only) ---
-        number_v     = number.style(width="10em")
-        number_tol_v = number_tol.style(width="10em")
-        dropdown_v   = dropdown.style(width="20em")
-
-        view = mo.hstack([dropdown_v, number_v, number_tol_v, slider], gap=0.5, justify="start")
-
-        # return both: view for rendering, widgets for reading .value
-        return {
-            "view": view,
-            "num": num,
-            "dropdown": dropdown,
-            "value": number,
-            "value_tol": number_tol,
-            "slider": slider,
-        }
-
-    # Keep the *data* (widgets) here:
-    rows = [param_line(n, d_options=exp2.data.columns, d_value=None) for n in [1, 2, 3, 4]]
-
-    # Render separately; DO NOT assign this back to `rows`
-    ui = mo.vstack([r["view"] for r in rows], gap=0.2)
-    ui
-    return (rows,)
-
-
-@app.cell
-def _(exp2, pl, rows):
-    selected = [
+def _(exp2, parameters, pl):
+    sel_param = [
         {
-            "row": r["num"],
-            "column": r["dropdown"].value,   # widget -> has .value
-            "value": r["value"].value,
-            "tolerance": r["value_tol"].value,
-            "std": r["slider"].value,
+            "parameter": par["parameter"].value,   # widget -> has .value
+            "value": par["value"].value,
+            "tolerance": par["tolerance"].value,
+            "std": par["std"].value,
         }
-        for r in rows
+        for par in parameters
     ]
 
 
-    T = selected[0]["value"]
-    Ttol = selected[0]["tolerance"]
+    T = sel_param[2]["value"]
+    Ttol = sel_param[2]["tolerance"]
 
     to_plot = exp2.data.filter(
         (pl.col("Set Freq [Hz]_mean") < 450e6)
@@ -257,7 +223,7 @@ def _(exp2, pl, rows):
         & (pl.col("series").list.contains(1))
     )
 
-    selected
+    # sel_param
     return (to_plot,)
 
 
