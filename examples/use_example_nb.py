@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.16.5"
+__generated_with = "0.17.0"
 app = marimo.App(width="medium")
 
 
@@ -98,7 +98,7 @@ def _():
             created_ax = True
         else:
             fig = ax.figure
-            ax.cla()  # clear if reusing
+            # ax.cla()  # clear if reusing
 
         # Extract columns
         if plot_scatter:
@@ -126,8 +126,9 @@ def _():
 
         xlabelN = kwargs.get("xlabel", x)
         ylabelN = kwargs.get("ylabel", y)
+        series = kwargs.get("series", 0)
         freq = 416.0e6
-        plot1name = f"{freq/1e6:.0f} MHz, B test mT Run 0"
+        plot1name = f"{freq/1e6:.0f} MHz, B {0} mT Series {series}"
 
         MarkSize = 7 * sc1
         LineW    = LineW * sc1
@@ -136,6 +137,7 @@ def _():
         MarkColor = 'none'
         Lcol = Pal[3]
 
+        paletecolor=2
         # Plot
         ax.errorbar(
             PlXax2, PlYax2, xerr=nsig * PlXer2, yerr=nsig * PlYer2,
@@ -169,15 +171,15 @@ def _():
         # fig.tight_layout()
 
         return fig, ax
-    return (plot_data2,)
+    return plot_data2, plt
 
 
 @app.cell
 def _(exp2, mo):
-    x_ax_input = mo.ui.dropdown(options=exp2.data.columns, value=None, label="X Axis:")
-    x_ax_std = mo.ui.slider(0, 5, value=1, label="Std:")
-    y_ax_input = mo.ui.dropdown(options=exp2.data.columns, value=None, label="Y Axis:")
-    y_ax_std = mo.ui.slider(0, 5, value=1, label="Std:")
+    x_ax_input = mo.ui.dropdown(options=exp2.data.columns, value="Peak Field on Sample [mT]", label="X Axis:")
+    x_ax_std = mo.ui.slider(0, 5, value=3, label="Std:")
+    y_ax_input = mo.ui.dropdown(options=exp2.data.columns, value="Surface Resistance [nOhm]", label="Y Axis:")
+    y_ax_std = mo.ui.slider(0, 5, value=3, label="Std:")
     ui3=mo.vstack([mo.hstack([x_ax_input, x_ax_std]), mo.hstack([y_ax_input, y_ax_std])])
     ui3
     return x_ax_input, x_ax_std, y_ax_input
@@ -186,21 +188,41 @@ def _(exp2, mo):
 @app.cell
 def _(exp2, mo):
     # Create individual UI elements for each row
-    parameters = mo.ui.array([
+    extra_parameters = [
         mo.ui.dictionary({
             "parameter": mo.ui.dropdown(options=exp2.data.columns, value=None, label=f"{i}"),
             "value": mo.ui.number(value=0.0, step=0.1, label="Value:"),
             "tolerance": mo.ui.number(value=0.0, step=0.1, label="Tolerance:"),
             "std": mo.ui.slider(0, 5, value=1, label="Std:")
         })
-        for i in range(4)
-    ])
+        for i in range(3,6)
+    ]
+
+    default_parameters = [
+        mo.ui.dictionary({
+            "parameter": mo.ui.dropdown(options=exp2.data.columns, value="Set Freq [Hz]", label=f"1"),
+            "value": mo.ui.number(value=416000000, step=1, label="Value:"),
+            "tolerance": mo.ui.number(value=90000000, step=1, label="Tolerance:"),
+            "std": mo.ui.slider(0, 5, value=1, label="Std:")
+        }),
+        mo.ui.dictionary({
+            "parameter": mo.ui.dropdown(options=exp2.data.columns, value="Peak Field on Sample [mT]", label=f"2"),
+            "value": mo.ui.number(value=10, step=1, label="Value:"),
+            "tolerance": mo.ui.number(value=1, step=0.1, label="Tolerance:"),
+            "std": mo.ui.slider(0, 5, value=1, label="Std:")
+        }),
+    ]
+
+    parameters = mo.ui.array(default_parameters+extra_parameters)
+
+    #"Set Freq [Hz]"
 
     # Your dynamic list
-    data = [1, 2, 4, 5, 6, 1]
+    # data = [1, 2, 4, 5, 6, 1]
+    series_list = exp2.data["series"].explode().unique().to_list()
 
     # Create a checkbox for each element in the list
-    checkboxes = mo.ui.array([mo.ui.checkbox(label=str(x)) for x in data])
+    series_checkboxes = mo.ui.array([mo.ui.checkbox(label=str(x)) for x in series_list])
     # [mo.md("Series: ")]
     # chline = mo.hstack(mo.ui.array(checkboxes, justify="start")
 
@@ -209,23 +231,26 @@ def _(exp2, mo):
     # mo.hstack(checkboxes, justify="start")
 
     # Display the elements in a vertical stack
-    ui4 = mo.vstack([mo.md("Series: ")]+[mo.hstack(checkboxes, justify="start")]+[
-        mo.hstack([elem["parameter"], elem["value"], elem["tolerance"]], gap=0.2, justify="start")
-        for elem in parameters
-    ])
+    ui4 = mo.vstack(
+        [mo.md("Series: ")] +
+        [mo.hstack(series_checkboxes, justify="start")] + 
+        [mo.md("Valued parameters: ")] +
+        [mo.hstack([elem["parameter"], elem["value"], elem["tolerance"]], gap=0.2, justify="start") for elem in parameters]
+    )
+
     ui4
-    return checkboxes, data, parameters
+    return parameters, series_checkboxes, series_list
 
 
 @app.cell
-def _(checkboxes, data):
-    checked_items = [item for item, checkbox in zip(data, checkboxes) if checkbox.value]
-    checked_items
-    return
+def _(series_checkboxes, series_list):
+    selected_series = [s for s, n in zip(series_list, series_checkboxes.value) if n]
+    # selected_series
+    return (selected_series,)
 
 
 @app.cell
-def _(exp2, parameters, pl):
+def _(exp2, parameters, pl, selected_series):
     selected_params = [
         {
             "parameter": par["parameter"].value,   # widget -> has .value
@@ -236,7 +261,8 @@ def _(exp2, parameters, pl):
         for par in parameters
     ]
 
-    expression=[]
+    expression = []
+    expression.append(pl.col("series").list.eval(pl.element().is_in(selected_series)).list.any())
     for pp in selected_params:
         pname = pp["parameter"]
         if pname is not None:
@@ -252,14 +278,24 @@ def _(exp2, parameters, pl):
             expression.append(expr)
 
     # AND all conditions
-    combined = pl.all_horizontal(expression) if expression else pl.lit(True)
+    combined_expression = pl.all_horizontal(expression) if expression else pl.lit(True)
 
-    to_plot = exp2.data.filter(combined)
+    to_plot = exp2.data.filter(combined_expression)
+    # to_plot
     return (to_plot,)
 
 
 @app.cell
-def _(mo, plot_data2, to_plot, x_ax_input, x_ax_std, y_ax_input):
+def _(
+    mo,
+    plot_data2,
+    plt,
+    selected_series,
+    to_plot,
+    x_ax_input,
+    x_ax_std,
+    y_ax_input,
+):
     ## TODO: What we need?
     # 1. Select if you want to plot scatter
     # 2. Add legend generation
@@ -267,15 +303,29 @@ def _(mo, plot_data2, to_plot, x_ax_input, x_ax_std, y_ax_input):
     # 4. 
 
     # This cell re-runs whenever nsig_slider.value changes
-    fig3, ax = plot_data2(
-        to_plot,
-        x=x_ax_input.value,#"Peak Field on Sample [mT]",
-        y=y_ax_input.value,#"Surface Resistance [nOhm]",
-        ylabel=r"Surface resistance $R_\mathrm{s}$ (n$\Omega$)",
-        xlabel=r"Sample temperature $T$ (K)",
-        nsig=x_ax_std.value,
-        LineW=1.0
+    bin_fig, ax = plt.subplots(figsize=(9, 6))
+
+    for s in selected_series:
+        fig3, ax = plot_data2(
+            to_plot,
+            x=x_ax_input.value,#"Peak Field on Sample [mT]",
+            y=y_ax_input.value,#"Surface Resistance [nOhm]",
+            ylabel=r"Surface resistance $R_\mathrm{s}$ (n$\Omega$)",
+            xlabel=r"Sample temperature $T$ (K)",
+            nsig=x_ax_std.value,
+            LineW=1.0,
+            series=s,
+            # plot_scatter=True,
+            ax=ax
+        )
+
+    ax.legend(
+        title="Series", 
+        loc="best",          # or "upper right", "lower left", etc.
+        # frameon=True, 
+        fontsize=10
     )
+
     # fig3.savefig("plot_output_5.pdf", bbox_inches="tight", pad_inches=1.0)
     mo.mpl.interactive(ax)
     return
