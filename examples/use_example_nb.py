@@ -53,7 +53,18 @@ def _(mo):
 
 
 @app.cell
-def _(cs, exp1):
+def _(exp1, mo):
+    x_ax_input = mo.ui.dropdown(options=exp1.data.columns, value="Peak Field on Sample [mT]", label="X Axis:")
+    x_ax_std = mo.ui.slider(0, 5, value=3, label="Std:")
+    y_ax_input = mo.ui.dropdown(options=exp1.data.columns, value="Surface Resistance [nOhm]", label="Y Axis:")
+    y_ax_std = mo.ui.slider(0, 5, value=3, label="Std:")
+    ui3=mo.vstack([mo.hstack([x_ax_input, x_ax_std]), mo.hstack([y_ax_input, y_ax_std])])
+    ui3
+    return x_ax_input, x_ax_std, y_ax_input
+
+
+@app.cell
+def _(exp1, x_ax_input, y_ax_input):
     # Add param from cluster_by_proximity to stats_cols be default
     group_schema = {
         "series": {"groups": [], "unite_rest": False},
@@ -62,11 +73,11 @@ def _(cs, exp1):
     exp2 = exp1.aggregate_and_compute(
         params = [("Set Temp [K]", 0.09), ("Peak Field on Sample [mT]", 0.5), ("Set Freq [Hz]", 100000)],
         schema = group_schema,
-        extra_stats_cols=["LS336 B [K]", "Set Freq [Hz]"],
+        extra_stats_cols=["LS336 B [K]", "Set Freq [Hz]"]+[x_ax_input.value, y_ax_input.value],
         remove_multiple=True,
         # with_aggroups=True
     )
-    exp2.data.select(cs.contains(["series"])).unique() #_aggroup
+    # exp2.data.select(cs.contains(["series"])).unique() #_aggroup
     # exp2.data.columns
     return (exp2,)
 
@@ -172,17 +183,6 @@ def _():
 
         return fig, ax
     return plot_data2, plt
-
-
-@app.cell
-def _(exp2, mo):
-    x_ax_input = mo.ui.dropdown(options=exp2.data.columns, value="Peak Field on Sample [mT]", label="X Axis:")
-    x_ax_std = mo.ui.slider(0, 5, value=3, label="Std:")
-    y_ax_input = mo.ui.dropdown(options=exp2.data.columns, value="Surface Resistance [nOhm]", label="Y Axis:")
-    y_ax_std = mo.ui.slider(0, 5, value=3, label="Std:")
-    ui3=mo.vstack([mo.hstack([x_ax_input, x_ax_std]), mo.hstack([y_ax_input, y_ax_std])])
-    ui3
-    return x_ax_input, x_ax_std, y_ax_input
 
 
 @app.cell
